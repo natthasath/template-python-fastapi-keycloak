@@ -1,46 +1,33 @@
-from fastapi import APIRouter, Depends, Request
-from fastapi.responses import JSONResponse, RedirectResponse
-from fastapi.security import HTTPBearer
-from app.middleware.auth import get_api_key, validate_access_token, verify_session
+from fastapi import APIRouter, Depends, Form, Request
+from fastapi.responses import JSONResponse
+from fastapi.security.api_key import APIKey
+from fastapi.params import Security
+from app.middleware.auth import get_api_key
 from app.services.service_keycloak import KeycloakService
-from decouple import config
 
 router = APIRouter(
     prefix="/keycloak",
     tags=["KEYCLOAK"],
     responses={404: {"message": "Not found"}}
+    # dependencies=[Security(get_api_key)]
 )
 
-bearer_scheme = HTTPBearer()
 keycloak_service = KeycloakService()
-
-KC_CLIENT_ID = config('KC_CLIENT_ID')
-KC_ENDPOINT_URL = config('KC_ENDPOINT_URL')
-KC_REDIRECT_URI = config('KC_REDIRECT_URI')
 
 @router.get("/login")
 async def login(request: Request):
-    authorization_url = f"{KC_ENDPOINT_URL}/protocol/openid-connect/auth?client_id={KC_CLIENT_ID}&redirect_uri={KC_REDIRECT_URI}&response_type=code&scope=openid"
-    if "application/json" in request.headers.get("accept", ""):
-        return JSONResponse(content={"login_url": authorization_url})
-    return RedirectResponse(authorization_url)
+    return await keycloak_service.login(request)
 
 @router.get("/callback")
 async def callback(code: str):
-    token_data = await keycloak_service.exchange_code_for_token(code)
-    return {
-        "access_token": token_data.get("access_token"),
-        "refresh_token": token_data.get("refresh_token"),
-        "expires_in": token_data.get("expires_in"),
-        "token_type": token_data.get("token_type"),
-    }
+    return await keycloak_service.callback(code)
 
 @router.get("/protected")
-async def get_credentials(user_info: dict = Depends(validate_access_token)):
+async def get_credentials(user_info: dict = Depends(keycloak_service.validate_access_token)):
     return JSONResponse(content={"message": "Access granted", "user": user_info})
 
 @router.get("/session")
-async def session_status(session_info: dict = Depends(verify_session)):
+async def session_status(session_info: dict = Depends(keycloak_service.verify_session)):
     return JSONResponse(content={"message": "Session is active", "session": session_info})
 
 @router.post("/refresh")
@@ -49,4 +36,4 @@ async def refresh_token(refresh_token: str):
 
 @router.post("/logout")
 async def logout(refresh_token: str):
-    return await keycloak_service.logout_user(refresh_token)
+    return await keycloak_service.logout(refresh_token)
