@@ -27,3 +27,7 @@ echo API_KEY | sha256sum
 ```shell
 docker-compose up -d
 ```
+
+### 👉🏻 Try it out
+
+- [Oauth Tools](https://oauth.tools/)
